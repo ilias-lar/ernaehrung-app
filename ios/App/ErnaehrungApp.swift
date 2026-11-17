@@ -28,19 +28,25 @@ struct ErnaehrungApp: App {
 struct RootView: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.theme) var theme
+    // Start-Argument „-tab 2“ öffnet direkt einen Tab (für Vorschau-Screenshots)
+    @State private var tab = UserDefaults.standard.integer(forKey: "tab")
 
     var body: some View {
-        TabView {
-            TodayView()
-                .tabItem { Label("Heute", systemImage: "flame.fill") }
-            PlanView()
-                .tabItem { Label("Plan", systemImage: "calendar") }
-            ShoppingView()
-                .tabItem { Label("Einkauf", systemImage: "cart.fill") }
-            FortschrittView()
-                .tabItem { Label("Fortschritt", systemImage: "chart.line.uptrend.xyaxis") }
+        if UserDefaults.standard.bool(forKey: "gallery") {
+            DemoGallery()
+        } else {
+            TabView(selection: $tab) {
+                TodayView()
+                    .tabItem { Label("Heute", systemImage: "flame.fill") }.tag(0)
+                PlanView()
+                    .tabItem { Label("Plan", systemImage: "calendar") }.tag(1)
+                ShoppingView()
+                    .tabItem { Label("Einkauf", systemImage: "cart.fill") }.tag(2)
+                FortschrittView()
+                    .tabItem { Label("Fortschritt", systemImage: "chart.line.uptrend.xyaxis") }.tag(3)
+            }
+            .task { await model.refreshAll() }
         }
-        .task { await model.refreshAll() }
     }
 }
 

@@ -34,3 +34,68 @@ workflows:
           echo "BUILD OK"; grep -E "warning:" build.log | sort -u | head -30 || true
     artifacts:
       - ios/build.log
+
+  ios-preview:
+    name: Vorschau-Screenshots (Simulator)
+    instance_type: mac_mini_m2
+    max_build_duration: 40
+    environment:
+      xcode: latest
+    scripts:
+      - name: Projekt erzeugen & bauen
+        script: |
+          brew install xcodegen
+          cd ios && xcodegen generate
+          set -o pipefail
+          xcodebuild -project Ernaehrung.xcodeproj -scheme Ernaehrung \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build -configuration Debug CODE_SIGNING_ALLOWED=NO build > build.log 2>&1 || {
+              grep -E "error:" build.log | sort -u | head -80; exit 1; }
+      - name: Simulator starten & Screenshots machen
+        script: |
+          cd ios
+          TYPE=$(xcrun simctl list devicetypes | grep -E "iPhone 1[5-9] Pro \(" | tail -1 | sed -E 's/.*\((com\.apple[^)]*)\).*/\1/')
+          RUNTIME=$(xcrun simctl list runtimes | grep -E "^iOS" | tail -1 | sed -E 's/.* - (com\.apple[^ ]*).*/\1/')
+          echo "Gerät: $TYPE / $RUNTIME"
+          UDID=$(xcrun simctl create Vorschau "$TYPE" "$RUNTIME")
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl status_bar "$UDID" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
+          xcrun simctl install "$UDID" build/Build/Products/Debug-iphonesimulator/Ernaehrung.app
+          mkdir -p shots
+          shot() { # Person, Tab, Name, [Galerie]
+            xcrun simctl terminate "$UDID" app.ernaehrung.plan 2>/dev/null || true
+            if [ "$4" = "gallery" ]; then
+              xcrun simctl launch "$UDID" app.ernaehrung.plan -demo "$1" -gallery YES
+            else
+              xcrun simctl launch "$UDID" app.ernaehrung.plan -demo "$1" -tab "$2"
+            fi
+            sleep 5
+            xcrun simctl io "$UDID" screenshot "shots/$3.png"
+          }
+          for P in ilias freundin; do
+            shot $P 0 "$P-1-heute"; shot $P 1 "$P-2-plan"; shot $P 2 "$P-3-einkauf"; shot $P 3 "$P-4-fortschritt"; shot $P 0 "$P-5-widgets" gallery
+          done
+          ls -la shots
+      - name: Übersichtsbild bauen
+        script: |
+          cd ios
+          python3 -m venv /tmp/v && /tmp/v/bin/pip install -q pillow
+          /tmp/v/bin/python - <<'PY'
+          from PIL import Image
+          import glob
+          rows = [sorted(glob.glob('shots/ilias-*.png')), sorted(glob.glob('shots/freundin-*.png'))]
+          W = 360; gap = 24
+          imgs = [[Image.open(p).convert('RGB') for p in r] for r in rows]
+          H = int(imgs[0][0].height * W / imgs[0][0].width)
+          out = Image.new('RGB', (gap + len(rows[0]) * (W + gap), gap + len(rows) * (H + gap)), (40, 40, 44))
+          for y, r in enumerate(imgs):
+              for x, im in enumerate(r):
+                  out.paste(im.resize((W, H), Image.LANCZOS), (gap + x * (W + gap), gap + y * (H + gap)))
+          out.save('shots/uebersicht.jpg', quality=88)
+          for p in glob.glob('shots/*-*.png'):
+              im = Image.open(p).convert('RGB'); im = im.resize((im.width // 2, im.height // 2), Image.LANCZOS)
+              im.save(p.replace('.png', '.jpg'), quality=85)
+          PY
+    artifacts:
+      - ios/shots/*.jpg

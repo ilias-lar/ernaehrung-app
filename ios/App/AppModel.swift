@@ -13,6 +13,20 @@ final class AppModel: ObservableObject {
     var theme: Theme { Theme.of(today?.person.theme ?? user?.pid) }
     private var api: APIClient { APIClient() }
 
+    /// Vorschau-Modus mit Beispieldaten (Start-Argument „-demo ilias|freundin“), ohne Server.
+    let demo: String? = UserDefaults.standard.string(forKey: "demo")
+
+    init() {
+        guard let demo, let url = Bundle.main.url(forResource: "demo", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let d = try? JSONDecoder().decode(DemoBundle.self, from: data) else { return }
+        let isF = demo == "freundin"
+        today = isF ? d.freundin : d.ilias
+        week = isF ? d.weekFreundin : d.weekIlias
+        shopping = d.shopping
+        user = AppUser(id: "demo", name: isF ? "Freundin" : "Ilias", email: "demo@beispiel.de", role: isF ? "user" : "admin", pid: isF ? "freundin" : "ilias")
+    }
+
     // MARK: Anmeldung
     func signedIn(_ r: AuthResponse) {
         SharedStore.token = r.token
@@ -36,7 +50,7 @@ final class AppModel: ObservableObject {
 
     // MARK: Laden
     func refreshAll() async {
-        guard user != nil else { return }
+        guard user != nil, demo == nil else { return }
         loading = true
         defer { loading = false }
         await refreshToday()
@@ -46,6 +60,7 @@ final class AppModel: ObservableObject {
     }
 
     func refreshToday() async {
+        guard demo == nil else { return }
         do {
             let t = try await api.today()
             today = t
@@ -57,10 +72,12 @@ final class AppModel: ObservableObject {
     }
 
     func refreshWeek() async {
+        guard demo == nil else { return }
         do { week = try await api.week() } catch { handle(error) }
     }
 
     func refreshShopping() async {
+        guard demo == nil else { return }
         do { shopping = try await api.shopping() } catch { handle(error) }
     }
 
@@ -77,6 +94,7 @@ final class AppModel: ObservableObject {
             t.eaten.fat += sign * meal.fat
             today = t
         }
+        guard demo == nil else { return }
         do {
             try await api.setMeal(slot: meal.slot, done: newValue)
         } catch { handle(error) }
@@ -107,4 +125,12 @@ final class AppModel: ObservableObject {
         }
         do { try await api.setChecked(foodId: item.foodId, checked: !item.checked) } catch { handle(error) }
     }
+}
+
+struct DemoBundle: Decodable {
+    let ilias: TodayPayload
+    let freundin: TodayPayload
+    let weekIlias: WeekPayload
+    let weekFreundin: WeekPayload
+    let shopping: ShoppingPayload
 }
