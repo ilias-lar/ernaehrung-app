@@ -1,0 +1,36 @@
+# Codemagic: baut die iPhone-App auf einem Mac in der Cloud (500 Gratis-Minuten/Monat).
+# Jetzt: nur Simulator-Build zum Prüfen. Später (mit Apple-Developer-Account): TestFlight-Workflow dazu.
+workflows:
+  ios-check:
+    name: iPhone-App prüfen (Simulator)
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+    environment:
+      xcode: latest
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+    when:
+      changeset:
+        includes:
+          - 'ios/**'
+          - 'codemagic.yaml'
+    scripts:
+      - name: XcodeGen installieren & Projekt erzeugen
+        script: |
+          brew install xcodegen
+          cd ios && xcodegen generate
+      - name: Für den Simulator bauen (ohne Signatur)
+        script: |
+          cd ios
+          set -o pipefail
+          xcodebuild -project Ernaehrung.xcodeproj -scheme Ernaehrung \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug CODE_SIGNING_ALLOWED=NO build > build.log 2>&1 || {
+              echo "===== FEHLER ====="; grep -E "error:" build.log | sort -u | head -80; exit 1; }
+          echo "BUILD OK"; grep -E "warning:" build.log | sort -u | head -30 || true
+    artifacts:
+      - ios/build.log
