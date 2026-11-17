@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anmelden · Ernährung</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Sora:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root { color-scheme: dark; --bg:#0d0f0e; --card:#1b1a18; --card-2:#23221f; --line:rgba(255,255,255,.08); --ink:#f0efec; --ink-2:#c3c2b7; --muted:#8d8b84; --accent:#36c48f; --warn:#f2b33d; }
+* { box-sizing: border-box; }
+body { margin:0; min-height:100vh; display:grid; place-items:center; background:radial-gradient(1200px 600px at 20% -10%, rgba(54,196,143,.12), transparent 60%), var(--bg); color:var(--ink); font:15px/1.5 Manrope, system-ui, sans-serif; padding:24px; }
+.box { width:100%; max-width:380px; background:var(--card); border:1px solid var(--line); border-radius:22px; padding:30px 26px; box-shadow:0 30px 80px rgba(0,0,0,.45); }
+.mark { width:44px; height:44px; border-radius:14px; background:var(--accent); display:grid; place-items:center; margin-bottom:16px; }
+h1 { font:600 23px/1.2 Sora, system-ui, sans-serif; margin:0 0 4px; letter-spacing:-.01em; }
+p.sub { color:var(--muted); margin:0 0 22px; font-size:14px; }
+label { display:block; font-size:12px; font-weight:600; color:var(--ink-2); margin:14px 0 6px; letter-spacing:.02em; }
+input { width:100%; padding:12px 14px; border-radius:12px; border:1px solid var(--line); background:var(--card-2); color:var(--ink); font:inherit; outline:none; }
+input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(54,196,143,.18); }
+button { width:100%; margin-top:22px; padding:13px; border:0; border-radius:12px; background:var(--accent); color:#07140f; font:700 15px Manrope, system-ui, sans-serif; cursor:pointer; }
+button:disabled { opacity:.6; cursor:wait; }
+.err { color:var(--warn); font-size:13px; margin-top:12px; min-height:18px; }
+.switch { margin-top:18px; font-size:13px; color:var(--muted); text-align:center; }
+.switch a { color:var(--accent); cursor:pointer; text-decoration:none; font-weight:600; }
+.hide { display:none; }
+</style>
+</head>
+<body>
+<form class="box" id="f" autocomplete="on">
+  <div class="mark"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#07140f" stroke-width="2.4" stroke-linecap="round"><path d="M5 19c8 0 14-6 14-14C11 5 5 11 5 19z"/><path d="M5 19l7-7"/></svg></div>
+  <h1 id="title">Anmelden</h1>
+  <p class="sub" id="sub">Dein Ernährungs-Dashboard</p>
+  <div id="f-name" class="hide"><label for="name">Name</label><input id="name" autocomplete="nickname" maxlength="24"></div>
+  <div id="f-code" class="hide"><label for="code">Einladungscode</label><input id="code" placeholder="ABCD-EFGH" autocapitalize="characters" autocomplete="off"></div>
+  <label for="email">E-Mail</label><input id="email" type="email" autocomplete="username" required>
+  <label for="pw">Passwort</label><input id="pw" type="password" autocomplete="current-password" required minlength="8">
+  <button id="go" type="submit">Anmelden</button>
+  <div class="err" id="err" role="alert"></div>
+  <div class="switch" id="sw"></div>
+</form>
+<script src="api.js"></script>
+<script>
+(async function () {
+  const $ = (id) => document.getElementById(id);
+  let mode = 'login';
+  const TEXT = {
+    setup: ['Einrichten', 'Erstes Konto anlegen – das wird dein Admin-Konto.', 'Admin-Konto anlegen'],
+    login: ['Anmelden', 'Dein Ernährungs-Dashboard', 'Anmelden'],
+    register: ['Registrieren', 'Mit dem Einladungscode, den du bekommen hast.', 'Konto anlegen'],
+  };
+  function setMode(m) {
+    mode = m; const t = TEXT[m];
+    $('title').textContent = t[0]; $('sub').textContent = t[1]; $('go').textContent = t[2];
+    $('f-name').classList.toggle('hide', m === 'login');
+    $('f-code').classList.toggle('hide', m !== 'register');
+    $('pw').autocomplete = m === 'login' ? 'current-password' : 'new-password';
+    $('sw').innerHTML = m === 'login' ? 'Einladungscode bekommen? <a id="to-reg">Registrieren</a>' : m === 'register' ? 'Schon ein Konto? <a id="to-login">Anmelden</a>' : '';
+    const a = $('to-reg') || $('to-login'); if (a) a.onclick = () => setMode(m === 'login' ? 'register' : 'login');
+    $('err').textContent = '';
+  }
+  if (API.token()) { const me = await API.call('GET', '/api/me'); if (me.ok) { location.href = '/'; return; } }
+  const s = await API.call('GET', '/api/setup');
+  setMode(s.data.needsSetup ? 'setup' : (location.hash === '#registrieren' ? 'register' : 'login'));
+
+  $('f').addEventListener('submit', async (ev) => {
+    ev.preventDefault(); $('err').textContent = ''; $('go').disabled = true;
+    const body = { email: $('email').value, password: $('pw').value };
+    if (mode !== 'login') body.name = $('name').value;
+    if (mode === 'register') body.code = $('code').value;
+    const r = await API.call('POST', '/api/' + mode, body);
+    $('go').disabled = false;
+    if (!r.ok) { $('err').textContent = r.data.error || 'Das hat nicht geklappt.'; return; }
+    API.setToken(r.data.token); location.href = '/';
+  });
+})();
+</script>
+</body>
+</html>

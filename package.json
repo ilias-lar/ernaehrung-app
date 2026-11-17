@@ -1,0 +1,11 @@
+{
+  "name": "ernaehrung-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ernährungs-Dashboard: Server, Web-Dashboard und iPhone-App",
+  "scripts": {
+    "start": "node server/server.js",
+    "test": "node --test server/tests/*.test.js"
+  },
+  "engines": { "node": ">=20" }
+}

@@ -1,0 +1,5 @@
+node_modules/
+data/
+*.xcodeproj/
+ios/build.log
+.DS_Store

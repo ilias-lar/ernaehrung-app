@@ -1,0 +1,36 @@
+name: iOS-Build
+on:
+  push:
+    paths: ['ios/**', '.github/workflows/ios.yml']
+  workflow_dispatch:
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: macos-15-intel
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode wählen
+        run: |
+          ls /Applications | grep Xcode
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_16*.app | sort -V | tail -1)"
+          xcodebuild -version
+      - name: XcodeGen installieren
+        run: brew install xcodegen
+      - name: Projekt erzeugen
+        working-directory: ios
+        run: xcodegen generate
+      - name: Für den Simulator bauen (ohne Signatur)
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild -project Ernaehrung.xcodeproj -scheme Ernaehrung \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug CODE_SIGNING_ALLOWED=NO build | tee build.log | grep -E "error:|warning: .*(deprecated|unused)|BUILD (SUCCEEDED|FAILED)" || true
+          grep -q "BUILD SUCCEEDED" build.log
+      - name: Fehler anzeigen
+        if: failure()
+        working-directory: ios
+        run: grep -E "error:" build.log | head -60 || tail -80 build.log
