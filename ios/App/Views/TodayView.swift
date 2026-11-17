@@ -13,11 +13,14 @@ struct TodayView: View {
                     VStack(spacing: 16) {
                         ScreenHeader(eyebrow: model.today.map { "\($0.weekday) · \($0.person.name)" } ?? "Heute", title: "Heute")
                         if let t = model.today {
-                            summaryCard(t)
-                            if let next = t.next { nextMealCard(next, today: t) }
-                            mealsCard(t)
-                            nutrientsCard(t)
-                            waterCard(t)
+                            TwoColumn {
+                                summaryCard(t)
+                                if let next = t.next { nextMealCard(next, today: t) }
+                                waterCard(t)
+                            } right: {
+                                mealsCard(t)
+                                nutrientsCard(t)
+                            }
                         } else if model.loading {
                             ProgressView().padding(60)
                         } else {
@@ -29,6 +32,7 @@ struct TodayView: View {
                     }
                     .padding(.horizontal, 18)
                     .padding(.bottom, 24)
+                    .readableWidth()
                 }
                 .refreshable { await model.refreshAll() }
             }

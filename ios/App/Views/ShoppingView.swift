@@ -12,13 +12,16 @@ struct ShoppingView: View {
                     ScreenHeader(eyebrow: "Woche · für euch beide", title: "Einkauf")
                     if let s = model.shopping {
                         totals(s)
-                        ForEach(s.groups) { g in group(g) }
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 16, alignment: .top)], spacing: 16) {
+                            ForEach(s.groups) { g in group(g) }
+                        }
                     } else {
                         ProgressView().padding(60)
                     }
                 }
                 .padding(.horizontal, 18)
                 .padding(.bottom, 24)
+                .readableWidth()
             }
             .refreshable { await model.refreshShopping() }
         }

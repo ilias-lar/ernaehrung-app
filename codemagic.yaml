@@ -54,28 +54,37 @@ workflows:
       - name: Simulator starten & Screenshots machen
         script: |
           cd ios
-          TYPE=$(xcrun simctl list devicetypes | grep -E "iPhone 1[5-9] Pro \(" | tail -1 | sed -E 's/.*\((com\.apple[^)]*)\).*/\1/')
           RUNTIME=$(xcrun simctl list runtimes | grep -E "^iOS" | tail -1 | sed -E 's/.* - (com\.apple[^ ]*).*/\1/')
-          echo "Gerät: $TYPE / $RUNTIME"
-          UDID=$(xcrun simctl create Vorschau "$TYPE" "$RUNTIME")
-          xcrun simctl boot "$UDID"
-          xcrun simctl bootstatus "$UDID" -b
-          xcrun simctl status_bar "$UDID" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
-          xcrun simctl install "$UDID" build/Build/Products/Debug-iphonesimulator/Ernaehrung.app
+          xcrun simctl list devicetypes | grep -i iphone | tail -8
           mkdir -p shots
-          shot() { # Person, Tab, Name, [Galerie]
-            xcrun simctl terminate "$UDID" app.ernaehrung.plan 2>/dev/null || true
-            if [ "$4" = "gallery" ]; then
-              xcrun simctl launch "$UDID" app.ernaehrung.plan -demo "$1" -gallery YES
-            else
-              xcrun simctl launch "$UDID" app.ernaehrung.plan -demo "$1" -tab "$2"
-            fi
-            sleep 5
-            xcrun simctl io "$UDID" screenshot "shots/$3.png"
+          run_device() { # Regex Gerätetyp, Präfix, Liste "person:tab:name[:gallery]"
+            TYPE=$(xcrun simctl list devicetypes | grep -E "$1" | tail -1 | sed -E 's/.*\((com\.apple[^)]*)\).*/\1/')
+            if [ -z "$TYPE" ]; then echo "Kein Gerät für $1"; return 0; fi
+            echo "Gerät: $TYPE / $RUNTIME"
+            UDID=$(xcrun simctl create "Vorschau-$2" "$TYPE" "$RUNTIME")
+            xcrun simctl boot "$UDID"
+            xcrun simctl bootstatus "$UDID" -b
+            xcrun simctl status_bar "$UDID" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
+            xcrun simctl install "$UDID" build/Build/Products/Debug-iphonesimulator/Ernaehrung.app
+            shift 2
+            for spec in "$@"; do
+              IFS=: read -r P T N G <<< "$spec"
+              xcrun simctl terminate "$UDID" app.ernaehrung.plan 2>/dev/null || true
+              if [ "$G" = "gallery" ]; then
+                xcrun simctl launch "$UDID" app.ernaehrung.plan -demo "$P" -gallery YES
+              else
+                xcrun simctl launch "$UDID" app.ernaehrung.plan -demo "$P" -tab "$T"
+              fi
+              sleep 5
+              xcrun simctl io "$UDID" screenshot "shots/$N.png"
+            done
+            xcrun simctl shutdown "$UDID" || true
           }
-          for P in ilias freundin; do
-            shot $P 0 "$P-1-heute"; shot $P 1 "$P-2-plan"; shot $P 2 "$P-3-einkauf"; shot $P 3 "$P-4-fortschritt"; shot $P 0 "$P-5-widgets" gallery
-          done
+          run_device "iPhone 1[5-9] Pro \\(" pro \
+            ilias:0:ilias-1-heute ilias:1:ilias-2-plan ilias:2:ilias-3-einkauf ilias:3:ilias-4-fortschritt ilias:0:ilias-5-widgets:gallery \
+            freundin:0:freundin-1-heute freundin:1:freundin-2-plan freundin:2:freundin-3-einkauf freundin:3:freundin-4-fortschritt freundin:0:freundin-5-widgets:gallery
+          run_device "iPhone Duo" duo \
+            ilias:0:duo-1-ilias-heute ilias:1:duo-2-ilias-plan freundin:0:duo-3-freundin-heute freundin:2:duo-4-freundin-einkauf
           ls -la shots
       - name: Übersichtsbild bauen
         script: |
@@ -84,16 +93,23 @@ workflows:
           /tmp/v/bin/python - <<'PY'
           from PIL import Image
           import glob
-          rows = [sorted(glob.glob('shots/ilias-*.png')), sorted(glob.glob('shots/freundin-*.png'))]
-          W = 360; gap = 24
-          imgs = [[Image.open(p).convert('RGB') for p in r] for r in rows]
-          H = int(imgs[0][0].height * W / imgs[0][0].width)
-          out = Image.new('RGB', (gap + len(rows[0]) * (W + gap), gap + len(rows) * (H + gap)), (40, 40, 44))
-          for y, r in enumerate(imgs):
-              for x, im in enumerate(r):
-                  out.paste(im.resize((W, H), Image.LANCZOS), (gap + x * (W + gap), gap + y * (H + gap)))
-          out.save('shots/uebersicht.jpg', quality=88)
-          for p in glob.glob('shots/*-*.png'):
+          def collage(rows, out_name, H=760):
+              rows = [r for r in rows if r]
+              if not rows: return
+              imgs = [[Image.open(p).convert('RGB') for p in r] for r in rows]
+              gap = 24
+              scaled = [[im.resize((int(im.width * H / im.height), H), Image.LANCZOS) for im in r] for r in imgs]
+              W = max(sum(im.width for im in r) + gap * (len(r) + 1) for r in scaled)
+              out = Image.new('RGB', (W, gap + len(scaled) * (H + gap)), (40, 40, 44))
+              for y, r in enumerate(scaled):
+                  x = gap
+                  for im in r:
+                      out.paste(im, (x, gap + y * (H + gap))); x += im.width + gap
+              out.save('shots/' + out_name, quality=88)
+          collage([sorted(glob.glob('shots/ilias-*.png')), sorted(glob.glob('shots/freundin-*.png'))], 'uebersicht.jpg')
+          duo = sorted(glob.glob('shots/duo-*.png'))
+          collage([duo[:2], duo[2:]], 'duo-uebersicht.jpg', H=900)
+          for p in glob.glob('shots/*.png'):
               im = Image.open(p).convert('RGB'); im = im.resize((im.width // 2, im.height // 2), Image.LANCZOS)
               im.save(p.replace('.png', '.jpg'), quality=85)
           PY

@@ -104,3 +104,28 @@ struct ScreenHeader: View {
         .sheet(isPresented: $showProfile) { ProfileSheet().environmentObject(model).environment(\.theme, theme) }
     }
 }
+
+/// Zwei Spalten, wenn genug Platz ist (z. B. aufgeklapptes iPhone Duo), sonst untereinander.
+struct TwoColumn<Left: View, Right: View>: View {
+    @ViewBuilder var left: Left
+    @ViewBuilder var right: Right
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 16) {
+                VStack(spacing: 16) { left }.frame(maxWidth: .infinity)
+                VStack(spacing: 16) { right }.frame(maxWidth: .infinity)
+            }
+            .frame(minWidth: 640)
+            VStack(spacing: 16) {
+                left
+                right
+            }
+        }
+    }
+}
+
+extension View {
+    /// Auf sehr breiten Bildschirmen nicht endlos in die Breite ziehen.
+    func readableWidth() -> some View { frame(maxWidth: 1100).frame(maxWidth: .infinity) }
+}

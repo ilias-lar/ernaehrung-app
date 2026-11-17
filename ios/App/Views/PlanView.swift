@@ -14,14 +14,18 @@ struct PlanView: View {
                     if let w = model.week {
                         let day = selected ?? w.todayIndex
                         dayPicker(w, selected: day)
-                        if let d = w.days.first(where: { $0.index == day }) { dayCard(d) }
-                        weekBars(w, selected: day)
+                        TwoColumn {
+                            if let d = w.days.first(where: { $0.index == day }) { dayCard(d) }
+                        } right: {
+                            weekBars(w, selected: day)
+                        }
                     } else {
                         ProgressView().padding(60)
                     }
                 }
                 .padding(.horizontal, 18)
                 .padding(.bottom, 24)
+                .readableWidth()
             }
             .refreshable { await model.refreshWeek() }
         }

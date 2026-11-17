@@ -16,15 +16,19 @@ struct FortschrittView: View {
                     ScreenHeader(eyebrow: "Gewicht & Trend", title: "Fortschritt")
                     if let t = model.today {
                         summary(t.weight)
-                        chart(t.weight)
-                        entryCard
-                        history(t.weight)
+                        TwoColumn {
+                            chart(t.weight)
+                            entryCard
+                        } right: {
+                            history(t.weight)
+                        }
                     } else {
                         ProgressView().padding(60)
                     }
                 }
                 .padding(.horizontal, 18)
                 .padding(.bottom, 24)
+                .readableWidth()
             }
             .refreshable { await model.refreshToday() }
         }
