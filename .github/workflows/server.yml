@@ -3,6 +3,7 @@ on:
   push:
     paths: ['server/**', 'shared/**', 'web/**', '.github/workflows/server.yml']
   pull_request:
+  workflow_dispatch:
 jobs:
   test:
     runs-on: ubuntu-latest
