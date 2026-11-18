@@ -53,12 +53,18 @@ workflows:
               grep -E "error:" build.log | sort -u | head -80; exit 1; }
       - name: Simulator starten & Screenshots machen
         script: |
+          #!/usr/bin/env bash
           cd ios
           RUNTIME=$(xcrun simctl list runtimes | grep -E "^iOS" | tail -1 | sed -E 's/.* - (com\.apple[^ ]*).*/\1/')
           xcrun simctl list devicetypes | grep -i iphone | tail -8
           mkdir -p shots
           run_device() { # Regex Gerätetyp, Präfix, Liste "person:tab:name[:gallery]"
-            TYPE=$(xcrun simctl list devicetypes | grep -E "$1" | tail -1 | sed -E 's/.*\((com\.apple[^)]*)\).*/\1/')
+            TYPE=""
+            for name in $(echo "$1"); do  # bevorzugte Geräte der Reihe nach (Unterstrich = Leerzeichen)
+              n=$(echo "$name" | tr '_' ' ')
+              TYPE=$(xcrun simctl list devicetypes | grep -F "$n (" | head -1 | sed -E 's/.*\((com\.apple[^)]*)\).*/\1/')
+              [ -n "$TYPE" ] && break
+            done
             if [ -z "$TYPE" ]; then echo "Kein Gerät für $1"; return 0; fi
             echo "Gerät: $TYPE / $RUNTIME"
             UDID=$(xcrun simctl create "Vorschau-$2" "$TYPE" "$RUNTIME")
@@ -76,14 +82,19 @@ workflows:
                 xcrun simctl launch "$UDID" app.ernaehrung.plan -demo "$P" -tab "$T"
               fi
               sleep 5
-              xcrun simctl io "$UDID" screenshot "shots/$N.png"
+              if ! xcrun simctl io "$UDID" screenshot "shots/$N.png" 2> /tmp/shot.err; then
+                # Mehrere Bildschirme (iPhone Duo): jeden einzeln aufnehmen
+                for d in $(grep -oE -- '--display=[0-9]+' /tmp/shot.err | cut -d= -f2); do
+                  xcrun simctl io "$UDID" screenshot --display="$d" "shots/$N-display$d.png" || true
+                done
+              fi
             done
             xcrun simctl shutdown "$UDID" || true
           }
-          run_device "iPhone 1[5-9] Pro \\(" pro \
+          run_device "iPhone_18_Pro iPhone_17_Pro iPhone_16_Pro" pro \
             ilias:0:ilias-1-heute ilias:1:ilias-2-plan ilias:2:ilias-3-einkauf ilias:3:ilias-4-fortschritt ilias:0:ilias-5-widgets:gallery \
             freundin:0:freundin-1-heute freundin:1:freundin-2-plan freundin:2:freundin-3-einkauf freundin:3:freundin-4-fortschritt freundin:0:freundin-5-widgets:gallery
-          run_device "iPhone Duo" duo \
+          run_device "iPhone_Duo" duo \
             ilias:0:duo-1-ilias-heute ilias:1:duo-2-ilias-plan freundin:0:duo-3-freundin-heute freundin:2:duo-4-freundin-einkauf
           ls -la shots
       - name: Übersichtsbild bauen
@@ -107,8 +118,10 @@ workflows:
                       out.paste(im, (x, gap + y * (H + gap))); x += im.width + gap
               out.save('shots/' + out_name, quality=88)
           collage([sorted(glob.glob('shots/ilias-*.png')), sorted(glob.glob('shots/freundin-*.png'))], 'uebersicht.jpg')
+          import re
           duo = sorted(glob.glob('shots/duo-*.png'))
-          collage([duo[:2], duo[2:]], 'duo-uebersicht.jpg', H=900)
+          displays = sorted(set(re.findall(r'(display\d+)', ' '.join(duo)))) or ['']
+          collage([[p for p in duo if d in p] for d in displays], 'duo-uebersicht.jpg', H=900)
           for p in glob.glob('shots/*.png'):
               im = Image.open(p).convert('RGB'); im = im.resize((im.width // 2, im.height // 2), Image.LANCZOS)
               im.save(p.replace('.png', '.jpg'), quality=85)
