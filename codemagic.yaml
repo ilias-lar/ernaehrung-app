@@ -67,7 +67,7 @@ workflows:
             done
             if [ -z "$TYPE" ]; then echo "Kein Gerät für $1"; return 0; fi
             echo "Gerät: $TYPE / $RUNTIME"
-            UDID=$(xcrun simctl create "Vorschau-$2" "$TYPE" "$RUNTIME")
+            UDID=$(xcrun simctl create "Vorschau-$2" "$TYPE")  # passende iOS-Version wählt simctl selbst
             xcrun simctl boot "$UDID"
             xcrun simctl bootstatus "$UDID" -b
             xcrun simctl status_bar "$UDID" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
